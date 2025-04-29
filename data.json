@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    { "name": "total" },
+    { "name": "positive" },
+    { "name": "failed" },
+    { "name": "positive: withPositiveName" },
+    { "name": "positive: withNegativeName" },
+    { "name": "positive: neutral" },
+    { "name": "failed: withPositiveName" },
+    { "name": "failed: withNegativeName" },
+    { "name": "failed: neutral" }
+  ],
+  "links": [
+    { "source": 0, "target": 1, "value": 3345 },
+    { "source": 0, "target": 2, "value": 4070 },
+
+    { "source": 1, "target": 3, "value": 1419 },
+    { "source": 1, "target": 4, "value": 1322 },
+    { "source": 1, "target": 5, "value": 604 },
+
+    { "source": 2, "target": 6, "value": 1574 },
+    { "source": 2, "target": 7, "value": 1650 },
+    { "source": 2, "target": 8, "value": 846 }
+  ]
+}

@@ -1,31 +1,23 @@
-import * as v from "@valibot/valibot"; // 1.31 kB
+import * as v from "@valibot/valibot";
 
-/*
-	  Col 0: Lfd Nr. (not important)
-		Col 1: ID
-		Col 2: Gemeinde/Stadt/Kreis
-		Col 3: Name
-		Col 4: Initiation/Verfahrenstyp
-		Col 5: Result
-		Col 6: Year
-		...
-		Col 8: Bundesland
-		Col 9: Thema
-		  1: Öffentliche Infrastruktur- und Versorgungseinrichtungen
-			2: Öffentliche Sozial- und Bildungseinrichtungen
-			3: Kulturprojekte
-			4: Entsorgungsprojekte
-			5: Wirtschaftsprojekte
-			6: Verkehrsprojekte
-			7: Gebühren und Abgaben
-			8: Hauptsatzung oder andere Satzung
-			9: Sonstiges
-			10: Gebietsreform
-			11: Wohngebietsprojekte
-			12: Planungssatzungen (Bauleitplanung)
-			13: Wirtschaftsprojekte (Mobilfunk)
-		Col 10: Status
-	*/
+// CLI-Argumente verarbeiten
+// const [filePath = "projects.json"] = Deno.args;
+
+const filePath = "projects.json";
+
+// Farbiges Logging
+const log = {
+  info: (text: string) => console.log(`%cℹ ${text}`, "color: gray"),
+  success: (text: string) =>
+    console.log(`%c✅ ${text}`, "color: green; font-weight: bold"),
+  warn: (text: string) => console.log(`%c⚠ ${text}`, "color: orange"),
+  error: (text: string) =>
+    console.log(`%c❌ ${text}`, "color: red; font-weight: bold"),
+  headline: (text: string) =>
+    console.log(`%c${text}`, "font-weight: bold; text-decoration: underline"),
+};
+
+// Schema für Initiativen
 const InitiativeSchema = v.object({
   id: v.number(),
   region: v.string(),
@@ -34,10 +26,9 @@ const InitiativeSchema = v.object({
   type: v.string(),
   year: v.pipe(
     v.transform((value) => {
-      if (typeof value === "string") {
-        return parseInt(value);
-      }
-      return value;
+      const parsed = typeof value === "string" ? parseInt(value) : value;
+      if (isNaN(parsed)) throw new Error("Invalid year");
+      return parsed;
     }),
     v.number(),
     v.minValue(1900),
@@ -48,65 +39,35 @@ const InitiativeSchema = v.object({
 });
 type Initiative = v.InferOutput<typeof InitiativeSchema>;
 
-const initiativesFileContent = await Deno.readTextFile("projects.json");
-
-let rawInitiatives;
+// Datei lesen
+let rawInitiatives: any[];
 try {
-  rawInitiatives = JSON.parse(initiativesFileContent);
-} catch (error) {
-  console.error("Error parsing initiatives JSON:", error);
+  const content = await Deno.readTextFile(filePath);
+  rawInitiatives = JSON.parse(content);
+} catch (err) {
+  log.error(
+    `Fehler beim Einlesen oder Parsen der Datei "${filePath}": ${err.message}`,
+  );
+  Deno.exit(1);
 }
 
+// Transformation in Objekte mit Schema-Validierung
 const initiatives = v.parse(
   v.array(InitiativeSchema),
-  rawInitiatives.map((initiative: any) => {
-    // initiative is array
-    // 	[
-    // 	1,
-    // 	12386,
-    // 	"Rödental, St",
-    // 	"Für eine Sanierung des Rathausgebäudes",
-    // 	"2. b (genauer:) Ratsreferendum: aufgegriffenes Bürgerbegehren",
-    // 	"Offen",
-    // 	"2025",
-    // 	"<div class=\"row\"><div class=\"col-lg-6\"><a href=\"/initiative/detail?id=12386\"><i class=\"far fa-eye\"></i> Details</a></div></div>",
-    // 	"BAY",
-    // 	1,
-    // 	"BE-Termin angesetzt"
-    // ],
-    return v.parse(InitiativeSchema, {
-      id: initiative[1],
-      region: initiative[2],
-      name: initiative[3],
-      topic: initiative[9],
-      type: initiative[4],
-      year: initiative[6],
-      result: initiative[5],
-      status: initiative[10],
-      province: initiative[8],
-    });
-  }),
+  rawInitiatives.map((i: any) => ({
+    id: i[1],
+    region: i[2],
+    name: i[3],
+    topic: i[9],
+    type: i[4],
+    year: i[6],
+    result: i[5],
+    status: i[10],
+    province: i[8],
+  })),
 );
 
-// Find Initiatives without status
-const initiativesWithoutStatus = initiatives.filter((initiative: Initiative) =>
-  initiative.status === null
-);
-
-const relevantInitiatives = initiatives.filter((initiative: Initiative) =>
-  initiative.status !== null
-);
-
-const positiveInitiatives: Initiative[] = initiatives.filter((
-  initiative: Initiative,
-) =>
-  initiative.result === "Positiv erledigt durch neuen Gemeinderatsbeschluss" ||
-  initiative.result === "BE im Sinne des Begehrens"
-);
-
-console.log(`Positive Initiatives: ${positiveInitiatives.length}`);
-
-// Check if the initiative has a positive name connotation, e.g. "Für ..., Pro ..."
+// Hilfsfunktionen
 const positiveWords = [
   "für",
   "pro",
@@ -117,90 +78,95 @@ const positiveWords = [
   "einführung",
   "rettet",
 ];
-function filterForPositiveName(initiatives: Initiative[]) {
-  return positiveInitiatives.filter(
-    (initiative: Initiative) => {
-      if (
-        positiveWords.some((word) =>
-          initiative.name.toLowerCase().startsWith(word)
-        )
-      ) {
-        return true;
-      }
+const negativeWords = ["gegen", "verhinderung", "kein"];
 
-      return false;
-    },
-  );
+function startsWithWord(text: string | null | undefined, words: string[]) {
+  if (!text) return false;
+  const normalized = text.toLocaleLowerCase("de").normalize("NFKC").trim();
+  return words.some((word) => normalized.startsWith(word));
 }
-const withPositiveName = filterForPositiveName(positiveInitiatives);
-console.log(
-  `Initiatives with positive name connotation: ${withPositiveName.length}`,
+
+// Auswertungen
+const initiativesWithoutStatus = initiatives.filter((i) => i.status === null);
+const positiveInitiatives = initiatives.filter((i) =>
+  i.result === "Positiv erledigt durch neuen Gemeinderatsbeschluss" ||
+  i.result === "BE im Sinne des Begehrens"
+);
+const withPositiveName = positiveInitiatives.filter((i) =>
+  startsWithWord(i.name, positiveWords)
+);
+const withNegativeName = positiveInitiatives.filter((i) =>
+  startsWithWord(i.name, negativeWords)
+);
+const unaccountedInitiatives = positiveInitiatives.filter((i) =>
+  ![...withPositiveName, ...withNegativeName].includes(i)
 );
 
-// Check if the initiative has a negative name connotation, e.g. "Gegen ..."
-const negativeWords = [
-  "gegen",
-  "verhinderung",
-  "kein",
-];
-function filterForNegativeName(initiatives: Initiative[]) {
-  return initiatives.filter(
-    (initiative: Initiative) => {
-      if (
-        negativeWords.some((word) =>
-          initiative.name.toLowerCase().startsWith(word)
-        )
-      ) {
-        return true;
-      }
+const failedInitiatives = initiatives.filter((i) =>
+  [
+    "BB erreicht zu wenig Unterschriften",
+    "Unzulässig",
+    "Verfahrenstyp",
+    "BE nicht im Sinne des Begehrens",
+    "BE in Stichentscheid gescheitert",
+  ].includes(i.result)
+);
 
-      return false;
-    },
+const failedWithPositiveName = failedInitiatives.filter((i) =>
+  startsWithWord(i.name, positiveWords)
+);
+const failedWithNegativeName = failedInitiatives.filter((i) =>
+  startsWithWord(i.name, negativeWords)
+);
+const failedWithNeutralName = failedInitiatives.filter((i) =>
+  ![...failedWithPositiveName, ...failedWithNegativeName].includes(i)
+);
+
+// Ausgabe
+log.headline("📊 Auswertung Initiativen");
+log.info(`Datei: ${filePath}`);
+log.success(`Gesamtzahl Initiativen: ${initiatives.length}`);
+log.info(`Ohne Status: ${initiativesWithoutStatus.length}`);
+
+console.log("");
+
+log.success(`Positiv bewertet: ${positiveInitiatives.length}`);
+log.info(`→ Mit positivem Namen: ${withPositiveName.length}`);
+log.info(`→ Mit negativem Namen: ${withNegativeName.length}`);
+log.info(`→ Neutral/unauffällig: ${unaccountedInitiatives.length}`);
+
+console.log("");
+
+log.error(`Gescheitert: ${failedInitiatives.length}`);
+log.info(`→ Mit positivem Namen: ${failedWithPositiveName.length}`);
+log.info(`→ Mit negativem Namen: ${failedWithNegativeName.length}`);
+log.info(`→ Neutral/unauffällig: ${failedWithNeutralName.length}`);
+
+log.success("Analyse abgeschlossen.");
+
+if (Deno.args.includes("--export")) {
+  await Deno.writeTextFile(
+    "results.json",
+    JSON.stringify(
+      {
+        total: initiatives.length,
+        withoutStatus: initiativesWithoutStatus.length,
+        positive: {
+          total: positiveInitiatives.length,
+          withPositiveName: withPositiveName.length,
+          withNegativeName: withNegativeName.length,
+          neutral: unaccountedInitiatives.length,
+        },
+        failed: {
+          total: failedInitiatives.length,
+          withPositiveName: failedWithPositiveName.length,
+          withNegativeName: failedWithNegativeName.length,
+          neutral: failedWithNeutralName.length,
+        },
+      },
+      null,
+      2,
+    ),
   );
+  log.success("📁 Ergebnisse gespeichert als results.json");
 }
-const withNegativeName = filterForNegativeName(positiveInitiatives);
-console.log(
-  `Initiatives with negative name connotation: ${withNegativeName.length}`,
-);
-
-const unaccountedInitiatives = positiveInitiatives.filter((initiative) =>
-  ![...withPositiveName, ...withNegativeName].includes(initiative)
-);
-console.log(
-  `Unaccounted Initiatives: ${unaccountedInitiatives.length}`,
-);
-
-console.log(`---`);
-
-const failedInitiatives: Initiative[] = initiatives.filter((
-  initiative: Initiative,
-) =>
-  initiative.result === "BB erreicht zu wenig Unterschriften" ||
-  initiative.result === "Unzulässig" ||
-  initiative.result === "Verfahrenstyp" ||
-  initiative.result === "BE nicht im Sinne des Begehrens" ||
-  initiative.result === "BE in Stichentscheid gescheitert"
-);
-console.log(`Failed Initiatives: ${failedInitiatives.length}`);
-
-const failedWithPositiveName = filterForPositiveName(failedInitiatives);
-
-console.log(
-  `Failed Initiatives with positive name connotation: ${failedWithPositiveName.length}`,
-);
-
-const failedWithNegativeName = filterForNegativeName(failedInitiatives);
-
-console.log(
-  `Failed Initiatives with negative name connotation: ${failedWithNegativeName.length}`,
-);
-
-const failedWithNeutralName = failedInitiatives.filter((initiative) =>
-  ![...failedWithPositiveName, ...failedWithNegativeName].includes(initiative)
-);
-
-console.log(
-  `Failed Initiatives with neutral name connotation: ${failedWithNeutralName.length}`,
-);
-
-console.log(failedWithNeutralName);

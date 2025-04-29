@@ -1,0 +1,16 @@
+{
+  "total": 10995,
+  "withoutStatus": 6,
+  "positive": {
+    "total": 3345,
+    "withPositiveName": 1419,
+    "withNegativeName": 1322,
+    "neutral": 604
+  },
+  "failed": {
+    "total": 4070,
+    "withPositiveName": 1574,
+    "withNegativeName": 1650,
+    "neutral": 846
+  }
+}

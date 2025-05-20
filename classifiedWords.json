@@ -1,0 +1,29 @@
+{
+  "positive": [
+    "für",
+    "pro",
+    "erweiterung",
+    "weiterführung",
+    "erhalt",
+    "rettung",
+    "einführung",
+    "rettet",
+    "mehr",
+    "zukunft",
+    "bessere",
+    "zustimmung",
+    "befürwortung",
+    "neuerarbeitung",
+    "sanierung"
+  ],
+  "negative": [
+    "gegen",
+    "verhinderung",
+    "kein",
+    "abschaffung",
+    "aufhebung",
+    "stopp",
+    "nein"
+  ],
+  "neutral": []
+}

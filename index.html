@@ -30,17 +30,17 @@
             const data = await fetch("results.json").then((res) => res.json());
 
             const categories = [
-                { label: "Positiv", value: data.positive.total },
                 {
-                    label: "Positiv + Name",
+                    label: "Positiv +Name",
                     value: data.positive.withPositiveName,
                 },
+                { label: "Positiv -Name", value: data.positive.withNegativeName },
                 { label: "Positiv – Neutral", value: data.positive.neutral },
-                { label: "Gescheitert", value: data.failed.total },
                 {
-                    label: "Gescheitert + Name",
+                    label: "Gescheitert +Name",
                     value: data.failed.withPositiveName,
                 },
+                { label: "Gescheitert -Name", value: data.failed.withNegativeName },
                 { label: "Gescheitert – Neutral", value: data.failed.neutral },
             ];
 
